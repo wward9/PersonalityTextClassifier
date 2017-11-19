@@ -3,13 +3,7 @@
 """
 Created on Sun Nov 12 14:32:27 2017
 
-@author: william
-
-to do: 
-    -wrap into a function
-    -Create vector of revevant twiiter pages
-    -Automatically assign user to personality categories based on pages
-    
+@author: william    
     
 """
 def get_follower ( x ):
