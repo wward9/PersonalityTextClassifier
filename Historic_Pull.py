@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
 from random import randint
-import queue
+import pandas
 
 '''
 download and install tor.
@@ -30,17 +30,16 @@ looks like new ip requests need to be staggered, or else the same ip is given
 
 
 def roxeanne():
-    global Q
-    global avail
-
+    global red_light
     while 1:
-        if not Q.empty():
-            avail.append(Q.get())
-            time.sleep(9)
         time.sleep(1)
-        if avail and avail[0] == 'done':
-            print('finished')
-            break
+        if red_light:
+            out = red_light.pop(0)
+            time.sleep(9)
+
+            if out == 'done':
+                print('finished')
+                break
 
 
 def init_torified_bowser():
@@ -49,7 +48,7 @@ def init_torified_bowser():
     while look:
         try:
             with Controller.from_port(port=9051) as controller:
-                controller.authenticate(password='16:05834BCEDD478D1060F1D7E2CE98E9C13075E8D3061D702F63BCD674DE')
+                controller.authenticate(password = '16:05834BCEDD478D1060F1D7E2CE98E9C13075E8D3061D702F63BCD674DE')
                 controller.signal(Signal.NEWNYM)
 
             look = 0
@@ -78,41 +77,57 @@ def init_torified_bowser():
 
 def multi_threader(funk, site_list, workers):
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        executor.map(funk, site_list, timeout=15)
+        futures = executor.map(funk, site_list, timeout=15)
+        return futures
 
 
 def scraper(site):
-    global Q
-    global avail
-    ident = threading.get_ident()
-    Q.put(ident)
+    try:
+        global red_light
+        ident = threading.get_ident()
 
-    while ident not in avail:
-        #print(avail)
+        while ident not in red_light:
+            red_light.append(ident)
+            time.sleep(1)
+
+        while ident in red_light:
+            time.sleep(1)
+
+        print(ident)
+
+        bowser = init_torified_bowser()
+        bowser.get(site)
         time.sleep(1)
-    avail.remove(ident)
+        bowser.close()
 
-    print(ident)
-
-    bowser = init_torified_bowser()
-    bowser.get(site)
-    time.sleep(5)
-    bowser.close()
+    except Exception as e:
+        print(e)
+        
+    return 1
 
 
 def init_scraper():
-    site_list = ["https://httpbin.org/ip" for i in range(4)]
-    multi_threader(scraper, site_list, 4)
-    Q.put('done')
+    site_list = ["https://httpbin.org/ip" for i in range(12)]
+    futures = multi_threader(scraper, site_list, 4)
+    red_light.append('done')
+
+    for i, f in enumerate(futures):
+        if i == 0:
+            output = pandas.DataFrame(f)
+        else:
+            output = pandas.concat([output, f])
+
+    return output
 
 
 def init(funk):
-    funk()
+    output = funk()
+    if output:
+        return output
 
 
-Q = queue.Queue()
-avail = []
+red_light = []
 
 funks = [init_scraper, roxeanne]
-multi_threader(init, funks, 2)
+output = multi_threader(init, funks, 2)
 
