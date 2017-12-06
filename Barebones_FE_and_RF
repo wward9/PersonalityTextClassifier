@@ -1,0 +1,71 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed May 24 09:54:01 2017
+
+@author: TBlume
+"""
+import pandas as pd   
+from bs4 import BeautifulSoup 
+import re  
+
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import CountVectorizer
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+
+
+#Data prep: Didn't change this as I don't know exactly what the data will be like
+train = pd.read_csv("C:/Users/Tblume/Documents/labeledTrainData.tsv", header=0, \
+                    delimiter="\t", quoting=3)
+test = pd.read_csv("C:/Users/Tblume/Documents/testData.tsv", header=0, delimiter="\t", \
+                   quoting=3 )
+
+
+
+
+#Below will take a tweet and break it down into features based on NLP theory assuming that the training data will contain a column for Id, tweet contents, and personality.
+example1 = BeautifulSoup(train["tweet"][0], "lxml") 
+letters_only = re.sub("[^a-zA-Z]"," ", example1.get_text() )
+lower_case = letters_only.lower() 
+words = lower_case.split() 
+words = [w for w in words if not w in stopwords.words("english")]
+
+def review_to_words( tweets ):
+     review_text = BeautifulSoup(tweets).get_text()
+     letters_only = re.sub("[^a-zA-Z]", " ", review_text)
+     words = letters_only.lower().split()  
+     stops = set(stopwords.words("english")) 
+     meaningful_words = [w for w in words if not w in stops]
+     return( " ".join( meaningful_words ))  
+clean_review = review_to_words( train["tweet"][0] )
+num_reviews = train["tweet"].size
+clean_train_reviews = []
+for i in range( 0, num_reviews ):
+    clean_train_reviews.append( review_to_words( train["tweet"][i] ) )
+    
+vectorizer = CountVectorizer(analyzer = "word",   \
+                             tokenizer = None,    \
+                             preprocessor = None, \
+                             stop_words = None,   \
+                             max_features = 5000) 
+train_data_features = vectorizer.fit_transform(clean_train_reviews)
+train_data_features = train_data_features.toarray()
+vocab = vectorizer.get_feature_names()
+
+dist = np.sum(train_data_features, axis=0)
+
+#This is the model, it will be trained on "train" and predict "test".  Just a simple RF
+
+forest = RandomForestClassifier(n_estimators = 100)
+forest = forest.fit( train_data_features, train["personality"] )
+num_reviews = len(test["tweet"])
+clean_test_reviews = [] 
+for i in range(0,num_reviews):
+    clean_review = review_to_words( test["tweet"][i] )
+    clean_test_reviews.append( clean_review )
+test_data_features = vectorizer.transform(clean_test_reviews)
+test_data_features = test_data_features.toarray()
+result = forest.predict(test_data_features)
+output = pd.DataFrame( data={"id":test["tweet"], "personality":result} )
+
+
